@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Cleanable Items List Builder</title>
+<style>
+  /* ===== Design tokens (Apple-inspired; 8px grid) ===== */
+  :root{
+    --bg-primary:#ffffff; --bg-secondary:#f5f5f7;
+    --text-primary:#1d1d1f; --text-secondary:#6e6e73;
+    --accent-blue:#0071e3; --accent-blue-hover:#0077ed; --accent-green:#1d8a3b; --accent-orange:#b25000;
+    --border-color:rgba(0,0,0,.1);
+    --glass-bg:rgba(255,255,255,.72); --glass-border:rgba(255,255,255,.6);
+    --nav-bg:rgba(255,255,255,.8);
+    --space-2:.5rem; --space-4:1rem; --space-6:1.5rem; --space-8:2rem; --space-12:3rem; --space-16:4rem; --space-24:6rem;
+    --radius-md:12px; --radius-xl:20px; --radius-2xl:24px; --radius-full:9999px;
+    --shadow-md:0 4px 12px rgba(0,0,0,.08);
+    --shadow-lg:0 8px 24px rgba(0,0,0,.08),0 16px 32px rgba(0,0,0,.08);
+    --ease:cubic-bezier(.4,0,.2,1);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg-primary:#000; --bg-secondary:#1d1d1f;
+      --text-primary:#f5f5f7; --text-secondary:#a1a1a6;
+      --accent-blue:#0a84ff; --accent-blue-hover:#409cff; --accent-green:#30d158; --accent-orange:#ff9f0a;
+      --border-color:rgba(255,255,255,.12);
+      --glass-bg:rgba(44,44,46,.62); --glass-border:rgba(255,255,255,.14);
+      --nav-bg:rgba(29,29,31,.72);
+      --shadow-md:0 4px 12px rgba(0,0,0,.5);
+      --shadow-lg:0 8px 24px rgba(0,0,0,.5),0 16px 32px rgba(0,0,0,.4);
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg-secondary); color:var(--text-primary);
+    font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,sans-serif;
+    font-size:1rem; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+
+  /* ===== Navigation (glass) ===== */
+  .navbar{
+    position:fixed; inset:0 0 auto 0; z-index:1000; height:48px;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--nav-bg);
+    backdrop-filter:blur(20px) saturate(180%); -webkit-backdrop-filter:blur(20px) saturate(180%);
+    border-bottom:1px solid var(--border-color);
+    font-size:.875rem; font-weight:600; letter-spacing:-.01em;
+  }
+  .navbar span{color:var(--text-secondary);font-weight:500;margin-left:var(--space-2)}
+
+  /* ===== Hero ===== */
+  .hero{
+    padding:calc(48px + var(--space-16)) var(--space-4) var(--space-12); text-align:center;
+    background:radial-gradient(60% 80% at 50% 0%,rgba(0,113,227,.14),transparent 70%),var(--bg-primary);
+  }
+  .hero-title{
+    margin:0 auto var(--space-4); max-width:14ch;
+    font-size:clamp(2.5rem,5vw + 1rem,4.5rem); font-weight:700; line-height:1.1; letter-spacing:-.02em;
+  }
+  .gradient-text{background:linear-gradient(90deg,#0071e3,#7a5af8 55%,#ff5e8a);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero-subtitle{margin:0 auto;max-width:36rem;font-size:clamp(1.0625rem,1vw + .9rem,1.375rem);line-height:1.45;color:var(--text-secondary)}
+
+  main{max-width:760px;margin:0 auto;padding:var(--space-8) var(--space-4) var(--space-24)}
+
+  /* ===== Cards ===== */
+  .card{
+    background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:var(--radius-2xl);
+    padding:var(--space-8); margin-bottom:var(--space-6); box-shadow:var(--shadow-lg);
+    backdrop-filter:blur(20px) saturate(180%); -webkit-backdrop-filter:blur(20px) saturate(180%);
+  }
+  @media (max-width:640px){.card{padding:var(--space-6);border-radius:var(--radius-xl)}}
+
+  /* ===== Drop zone ===== */
+  #drop{
+    display:flex; flex-direction:column; align-items:center; gap:var(--space-2);
+    padding:var(--space-12) var(--space-4); text-align:center; cursor:pointer;
+    border:2px dashed var(--border-color); border-radius:var(--radius-xl); background:var(--bg-primary);
+    transition:transform 300ms var(--ease),border-color 300ms var(--ease),background 300ms var(--ease);
+  }
+  #drop:hover{border-color:var(--accent-blue);transform:translateY(-2px)}
+  #drop.over{border-color:var(--accent-blue);background:rgba(0,113,227,.08);transform:scale(1.01)}
+  #drop svg{width:48px;height:48px;color:var(--accent-blue)}
+  #drop strong{font-size:1.375rem;font-weight:600;letter-spacing:-.01em}
+  #drop span{color:var(--text-secondary);font-size:.9375rem}
+
+  /* ===== Buttons ===== */
+  button{
+    display:inline-flex; align-items:center; justify-content:center; gap:var(--space-2);
+    min-height:44px; padding:.875rem 1.75rem; border:0; border-radius:980px;
+    background:var(--accent-blue); color:#fff; font:inherit; font-weight:500; cursor:pointer;
+    transition:transform 300ms var(--ease),box-shadow 300ms var(--ease),background 300ms var(--ease);
+  }
+  button:hover{background:var(--accent-blue-hover);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,113,227,.3)}
+  button:active{transform:translateY(0)}
+
+  /* ===== Results ===== */
+  .status{margin:0 0 var(--space-2);font-size:1.375rem;font-weight:600;letter-spacing:-.01em}
+  .ok{color:var(--accent-green)} .warn{color:var(--accent-orange)}
+  #job{color:var(--text-secondary);margin-bottom:var(--space-4)}
+  table{width:100%;border-collapse:collapse;font-size:.9375rem;margin:var(--space-4) 0 var(--space-6)}
+  th,td{text-align:left;padding:var(--space-2) var(--space-2);border-bottom:1px solid var(--border-color)}
+  th{color:var(--text-secondary);font-size:.8125rem;font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  tbody tr:last-child td{border-bottom:0}
+  #notes ul{margin:0 0 var(--space-6) 1.25rem;padding:0;color:var(--accent-orange)}
+  small{color:var(--text-secondary)}
+  .hint{margin:var(--space-4) 0 0;color:var(--text-secondary);font-size:.875rem}
+  .privacy{text-align:center;color:var(--text-secondary);font-size:.875rem}
+  .hidden{display:none}
+
+  /* ===== Focus & motion ===== */
+  :focus-visible{outline:2px solid var(--accent-blue);outline-offset:2px}
+  @keyframes fadeInUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+  .hero-title,.hero-subtitle,#intro-card{animation:fadeInUp 600ms ease-out both}
+  .hero-subtitle{animation-delay:100ms} #intro-card{animation-delay:200ms}
+  #result:not(.hidden){animation:fadeInUp 600ms ease-out both}
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  }
+</style>
+</head>
+<body>
+<nav class="navbar" aria-label="Site"><strong>Blue Kangaroo Packoutz</strong><span>Cleanable Items</span></nav>
+
+<header class="hero">
+  <h1 class="hero-title">Cleanable Items, <span class="gradient-text">organized</span>.</h1>
+  <p class="hero-subtitle">Drop in the CLN F9 report. Get back an editable Word list, grouped by room and box type, ready for the invoice and the adjuster.</p>
+</header>
+
+<main>
+  <section class="card" id="intro-card" aria-label="Upload">
+    <div id="drop" tabindex="0" role="button" aria-label="Choose or drop the CLN F9 PDF">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+      <strong>Drop the CLN F9 PDF here</strong>
+      <span>or click to choose a file · descriptions only, no images</span>
+    </div>
+    <input id="file" type="file" accept="application/pdf,.pdf" class="hidden">
+  </section>
+
+  <section id="result" class="card hidden" aria-live="polite">
+    <p id="status" class="status"></p>
+    <div id="job"></div>
+    <table id="summary"><thead><tr><th>Room</th><th class="n">Line items</th><th class="n">F9 count</th></tr></thead><tbody></tbody></table>
+    <div id="notes"></div>
+    <button id="dl">Download Word document</button>
+    <p class="hint">Open it in Word to correct any descriptions, then print to PDF for the adjuster.</p>
+  </section>
+
+  <p class="privacy">Everything runs in your browser. The PDF is never uploaded.</p>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+/* ---------- 1. PDF -> text lines ---------- */
+async function pdfToLines(buf){
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const lines=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const tc=await page.getTextContent();
+    const rows=[];
+    for(const it of tc.items){
+      if(!it.str||!it.str.trim()&&!it.str.length) continue;
+      const y=it.transform[5],x=it.transform[4];
+      let row=rows.find(r=>Math.abs(r.y-y)<2.5);
+      if(!row){row={y,items:[]};rows.push(row)}
+      row.items.push({x,w:it.width,s:it.str});
+    }
+    rows.sort((a,b)=>b.y-a.y);
+    for(const r of rows){
+      r.items.sort((a,b)=>a.x-b.x);
+      let t='',end=null;
+      for(const i of r.items){
+        if(end!==null&&i.x-end>1.0&&!t.endsWith(' ')&&!i.s.startsWith(' ')) t+=' ';
+        t+=i.s; end=i.x+i.w;
+      }
+      lines.push(t.replace(/\s+/g,' ').trim());
+    }
+  }
+  return lines.filter(l=>l.length);
+}
+
+/* ---------- 2. Parse rooms / items ---------- */
+function parseRooms(lines){
+  const rooms=[];let cur=null,ent=null,jobLabel='',total=null;
+  const skip=/©\s*20|220 Franklin|^\d+$|^CLN F9:|JBN\s*\d+$|Confidential/i;
+  for(const line of lines){
+    let m=line.match(/^CLN F9:\s*(.+?)\s+-\s+[A-Z][a-z]{2} \d/);
+    if(m&&!jobLabel) jobLabel=m[1];
+    m=line.match(/^Room:\s*(.+)$/);
+    if(m){cur={name:m[1].trim(),items:[],declared:null};rooms.push(cur);ent=null;continue}
+    m=line.match(/^Total Line Items In .* Location:\s*(\d+)/);
+    if(m){if(cur)cur.declared=+m[1];ent=null;continue}
+    m=line.match(/^Total Line Items Per Job:\s*(\d+)/);
+    if(m){total=+m[1];continue}
+    if(!cur||skip.test(line)) continue;
+    m=line.match(/^#(\d+)\s+(\d+)\s*(.*)$/);
+    if(m){ent={line:+m[1],qty:+m[2],raw:m[3].trim()};cur.items.push(ent)}
+    else if(ent){ent.raw+=' '+line}
+  }
+  return {rooms,jobLabel,total};
+}
+
+const CODE=/(\d{6}-\s?\d+|\d{8})\s*\((.*)\)\s*$/;
+function classify(box){
+  const b=box.toUpperCase();
+  if(/DOUBLE/.test(b)){
+    if(b.includes('MEDIUM'))return'Medium – Double';
+    if(b.includes('LARGE'))return'Large – Double';
+    if(b.includes('SMALL'))return'Small – Double';
+  }
+  if(b.includes('GLASSPACK')||b.includes('GLASS PACK'))return'Glass Pack';
+  if(b.includes('PICTURE'))return'Picture Box';
+  if(b.includes('LAMP'))return'Lamp Box';
+  if(b.includes('WARDROBE'))return'Wardrobe Box';
+  if(b.includes('WDF'))return'WDF Bag';
+  if(b.includes('HAND WASH'))return'Hand Wash Bag';
+  if(b.includes('DRY CLEAN'))return'Dry Cleaning Bag';
+  if(/\bLARGE\b/.test(b))return'Large';
+  if(/\bMED(IUM)?\b/.test(b))return'Medium';
+  if(/\bSMALL\b/.test(b))return'Small';
+  return'Single Items';   // vault / no box
+}
+const UP=new Set(['tv','dvd','cd','led','usb','pc','cds','dvds','vhs','lp','lps']);
+const PROPER={christmas:'Christmas',easter:'Easter',halloween:'Halloween',thanksgiving:'Thanksgiving',kenwood:'Kenwood',american:'American',santa:'Santa'};
+function fixWord(w){
+  const core=w.replace(/[^a-z]/g,'');
+  if(UP.has(core))return w.replace(core,core.toUpperCase());
+  if(PROPER[core])return w.replace(core,PROPER[core]);
+  return w;
+}
+function cleanDesc(d){
+  d=d.replace(/\([^)]*\)/g,'').replace(/multiple items\s*/ig,'');
+  d=d.replace(/\s*;\s*/g,'; ').replace(/\s+/g,' ').trim().replace(/^;+|;+$/g,'').trim();
+  if(!d)return'Description not provided';
+  d=d.toLowerCase().split(' ').map(fixWord).join(' ');
+  return d[0].toUpperCase()+d.slice(1);
+}
+const ORDER=['Small','Small – Double','Medium','Medium – Double','Large','Large – Double','Glass Pack','Picture Box','Lamp Box','Wardrobe Box','WDF Bag','Hand Wash Bag','Dry Cleaning Bag','Single Items'];
+
+function buildModel(parsed){
+  const problems=[];
+  const rooms=parsed.rooms.map(r=>{
+    const groups={};
+    for(const it of r.items){
+      let raw=it.raw.replace(/\[[^\]]*\]/g,'').replace(/\s+/g,' ').trim();
+      const m=raw.match(CODE);
+      if(!m){problems.push(`Room "${r.name}", line #${it.line}: could not find an item code. Check this line in the Word file.`);
+        (groups['Single Items']=groups['Single Items']||[]).push({line:it.line,qty:it.qty,desc:cleanDesc(raw),code:'(code not found)'});continue}
+      const g=classify(m[2]);
+      (groups[g]=groups[g]||[]).push({line:it.line,qty:it.qty,desc:cleanDesc(raw.slice(0,m.index)),code:m[1].replace(/\s/g,'')});
+    }
+    const keys=ORDER.filter(k=>groups[k]).concat(Object.keys(groups).filter(k=>!ORDER.includes(k)));
+    for(const k of keys)groups[k].sort((a,b)=>a.line-b.line);
+    return {name:r.name,groups,keys,count:r.items.length,declared:r.declared};
+  });
+  return {rooms,problems,jobLabel:parsed.jobLabel,total:parsed.total};
+}
+
+/* ---------- 3. Word document ---------- */
+function buildDoc(model){
+  const {Document,Paragraph,TextRun,Packer}=docx;
+  const F={font:'Arial',size:22};
+  const P=(runs,opts={})=>new Paragraph({spacing:{before:0,after:0,line:240},keepNext:!!opts.keepNext,keepLines:!!opts.keepLines,
+    children:runs.map(r=>new TextRun({...F,...r}))});
+  const blank=()=>P([{text:''}]);
+  const kids=[P([{text:'Cleanable Items List',bold:true,size:32}])];
+  if(model.jobLabel)kids.push(P([{text:model.jobLabel}]));
+  for(const r of model.rooms){
+    kids.push(blank(),blank());
+    kids.push(P([{text:r.name,bold:true,highlight:'yellow'}],{keepNext:true}));
+    r.keys.forEach((k,gi)=>{
+      if(gi>0)kids.push(blank());
+      const items=r.groups[k];
+      kids.push(P([{text:k,bold:true}],{keepNext:true}));
+      for(const it of items)kids.push(P([{text:`#${it.line} ${it.qty} ${it.desc} `},{text:it.code,bold:true}],{keepLines:true}));
+      kids.push(P([{text:`Subtotal ${k}: ${items.length} line items`,bold:true}]));
+    });
+  }
+  const doc=new Document({
+    styles:{default:{document:{run:{font:'Arial',size:22}}}},
+    sections:[{properties:{page:{size:{width:12240,height:15840},margin:{top:1080,right:1080,bottom:1080,left:1080}}},children:kids}]
+  });
+  return Packer.toBlob(doc);
+}
+
+/* ---------- 4. UI ---------- */
+let current=null;
+const $=id=>document.getElementById(id);
+const drop=$('drop'),fileIn=$('file');
+drop.addEventListener('click',()=>fileIn.click());
+drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')fileIn.click()});
+['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',e=>{if(e.dataTransfer.files[0])handle(e.dataTransfer.files[0])});
+fileIn.addEventListener('change',()=>{if(fileIn.files[0])handle(fileIn.files[0])});
+
+async function handle(file){
+  const res=$('result');res.classList.remove('hidden');
+  $('status').className='status';$('status').textContent='Reading '+file.name+' …';
+  $('summary').querySelector('tbody').innerHTML='';$('notes').innerHTML='';$('job').textContent='';$('dl').classList.add('hidden');
+  try{
+    const lines=await pdfToLines(await file.arrayBuffer());
+    const parsed=parseRooms(lines);
+    if(!parsed.rooms.length)throw new Error('No "Room:" sections found. Make sure this is the CLN F9 report (descriptions only), not the report with images.');
+    const model=buildModel(parsed);
+    const sum=model.rooms.reduce((a,r)=>a+r.count,0);
+    const notes=[...model.problems];
+    for(const r of model.rooms)if(r.declared!==null&&r.declared!==r.count)notes.push(`${r.name}: found ${r.count} items but the F9 says ${r.declared}.`);
+    if(model.total!==null&&model.total!==sum)notes.push(`Total found ${sum} but the F9 says ${model.total}.`);
+    const tb=$('summary').querySelector('tbody');
+    for(const r of model.rooms){
+      const tr=document.createElement('tr');
+      const bad=r.declared!==null&&r.declared!==r.count;
+      tr.innerHTML=`<td></td><td class="n">${r.count}</td><td class="n ${bad?'warn':''}">${r.declared??'–'}</td>`;
+      tr.firstChild.textContent=r.name;tb.appendChild(tr);
+    }
+    $('job').textContent=model.jobLabel?'Job: '+model.jobLabel:'';
+    const st=$('status');
+    if(notes.length){st.className='status warn';st.textContent=`Built, but please review ${notes.length} note(s) below.`;
+      const ul=document.createElement('ul');notes.forEach(n=>{const li=document.createElement('li');li.textContent=n;ul.appendChild(li)});$('notes').appendChild(ul)}
+    else{st.className='status ok';st.textContent=`All ${sum} line items accounted for across ${model.rooms.length} rooms.`}
+    const blob=await buildDoc(model);
+    current={blob,name:'Cleanable Items List'+(model.jobLabel?' - '+model.jobLabel.replace(/[\\/:*?"<>|]/g,'-'):'')+'.docx'};
+    $('dl').classList.remove('hidden');
+    window.__model=model;window.__ready=true;
+  }catch(err){
+    console.error(err);$('status').className='status warn';$('status').textContent='Could not process that file: '+err.message;
+  }
+}
+$('dl').addEventListener('click',()=>{
+  if(!current)return;
+  const a=document.createElement('a');a.href=URL.createObjectURL(current.blob);a.download=current.name;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+});
+</script>
+</body>
+</html>
