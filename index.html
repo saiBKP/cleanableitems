@@ -210,6 +210,8 @@ function parseRooms(lines){
 const CODE=/(\d{6}-\s?\d+|\d{8})\s*\((.*)\)\s*$/;
 function classify(box){
   const b=box.toUpperCase();
+  // whole-word match that also works when the size is followed by an underscore (e.g. SMALL_13697498)
+  const has=w=>new RegExp('(^|[^A-Z])'+w+'(?![A-Z])').test(b);
   if(/DOUBLE/.test(b)){
     if(b.includes('MEDIUM'))return'Medium – Double';
     if(b.includes('LARGE'))return'Large – Double';
@@ -222,9 +224,9 @@ function classify(box){
   if(b.includes('WDF'))return'WDF Bag';
   if(b.includes('HAND WASH'))return'Hand Wash Bag';
   if(b.includes('DRY CLEAN'))return'Dry Cleaning Bag';
-  if(/\bLARGE\b/.test(b))return'Large';
-  if(/\bMED(IUM)?\b/.test(b))return'Medium';
-  if(/\bSMALL\b/.test(b))return'Small';
+  if(has('LARGE'))return'Large';
+  if(has('MEDIUM')||has('MED'))return'Medium';
+  if(has('SMALL'))return'Small';
   return'Single Items';   // vault / no box
 }
 const UP=new Set(['tv','dvd','cd','led','usb','pc','cds','dvds','vhs','lp','lps']);
