@@ -86,6 +86,24 @@
   #drop strong{font-size:1.375rem;font-weight:600;letter-spacing:-.01em}
   #drop span{color:var(--text-secondary);font-size:.9375rem}
 
+  #drop-soft{
+    display:flex; align-items:center; gap:var(--space-4); margin-top:var(--space-4);
+    padding:var(--space-4) var(--space-6); cursor:pointer; text-align:left;
+    border:1.5px dashed var(--border-color); border-radius:var(--radius-xl); background:var(--bg-primary);
+    transition:transform 300ms var(--ease),border-color 300ms var(--ease),background 300ms var(--ease);
+  }
+  #drop-soft:hover{border-color:var(--accent-blue);transform:translateY(-2px)}
+  #drop-soft.over{border-color:var(--accent-blue);background:rgba(0,113,227,.08)}
+  #drop-soft.loaded{border-style:solid;border-color:var(--accent-green)}
+  #drop-soft svg{flex:none;width:28px;height:28px;color:var(--accent-blue)}
+  #drop-soft.loaded svg{display:none}
+  #drop-soft div{flex:1;min-width:0}
+  #drop-soft strong{display:block;font-weight:600;overflow-wrap:anywhere}
+  #drop-soft span{display:block;color:var(--text-secondary);font-size:.875rem}
+  #drop-soft .clear{flex:none;min-height:36px;padding:.4rem 1rem;background:transparent;color:var(--accent-blue);border:1.5px solid var(--accent-blue);font-size:.875rem}
+  #drop-soft .clear.hidden{display:none}
+  #drop-soft .clear:hover{background:var(--accent-blue);color:#fff;box-shadow:none}
+
   /* ===== Buttons ===== */
   button{
     display:inline-flex; align-items:center; justify-content:center; gap:var(--space-2);
@@ -127,7 +145,7 @@
 
 <header class="hero">
   <h1 class="hero-title">Cleanable Items, <span class="gradient-text">organized</span>.</h1>
-  <p class="hero-subtitle">Drop in the CLN F9 report. Get back an editable Word list, grouped by room and box type, ready for the invoice and the adjuster.</p>
+  <p class="hero-subtitle">Drop in the CLN F9 report, and the Soft Contents F9 if you have one. Get back an editable Word list, grouped by room and box type, ready for the invoice and the adjuster.</p>
 </header>
 
 <main>
@@ -138,6 +156,13 @@
       <span>or click to choose a file · descriptions only, no images</span>
     </div>
     <input id="file" type="file" accept="application/pdf,.pdf" class="hidden">
+
+    <div id="drop-soft" tabindex="0" role="button" aria-label="Choose or drop the optional Soft Contents F9 PDF">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      <div><strong id="soft-label">Add the Soft Contents F9 (optional)</strong><span id="soft-help"></span></div>
+      <button type="button" id="clear-soft" class="clear hidden" aria-label="Remove the Soft Contents F9">Remove</button>
+    </div>
+    <input id="file-soft" type="file" accept="application/pdf,.pdf" class="hidden">
   </section>
 
   <section id="result" class="card hidden" aria-live="polite">
@@ -246,23 +271,59 @@ function cleanDesc(d){
 }
 const ORDER=['Small','Small – Double','Medium','Medium – Double','Large','Large – Double','Glass Pack','Picture Box','Lamp Box','Wardrobe Box','WDF Bag','Hand Wash Bag','Dry Cleaning Bag','Single Items'];
 
-function buildModel(parsed){
+const roomKey=n=>n.toLowerCase().replace(/\s+/g,' ').trim();
+
+// Turn a parsed room's raw lines into {line, qty, desc, code, box} entries.
+function extractItems(r,problems){
+  const out=[];
+  for(const it of r.items){
+    const raw=it.raw.replace(/\[[^\]]*\]/g,'').replace(/\s+/g,' ').trim();
+    const m=raw.match(CODE);
+    if(!m){problems.push(`Room "${r.name}", line #${it.line}: could not find an item code. Check this line in the Word file.`);
+      out.push({line:it.line,qty:it.qty,desc:cleanDesc(raw),code:'(code not found)',box:''});continue}
+    out.push({line:it.line,qty:it.qty,desc:cleanDesc(raw.slice(0,m.index)),code:m[1].replace(/\s/g,''),box:m[2]});
+  }
+  return out;
+}
+
+// parsed = main CLN F9; softParsed = optional Soft Contents F9 (same layout).
+function buildModel(parsed,softParsed){
   const problems=[];
+  const soft=new Map();            // roomKey -> {name, items, declared}
+  const softCodes=new Set();
+  if(softParsed){
+    for(const r of softParsed.rooms){
+      const items=extractItems(r,problems).sort((a,b)=>a.line-b.line);
+      const k=roomKey(r.name), prev=soft.get(k);
+      if(prev){prev.items.push(...items);prev.declared=(prev.declared??0)+(r.declared??0)}
+      else soft.set(k,{name:r.name,items,declared:r.declared,rawCount:0});
+      soft.get(k).rawCount+=r.items.length;
+      items.forEach(i=>softCodes.add(i.code));
+    }
+  }
+  let moved=0;
+  const used=new Set();
   const rooms=parsed.rooms.map(r=>{
     const groups={};
-    for(const it of r.items){
-      let raw=it.raw.replace(/\[[^\]]*\]/g,'').replace(/\s+/g,' ').trim();
-      const m=raw.match(CODE);
-      if(!m){problems.push(`Room "${r.name}", line #${it.line}: could not find an item code. Check this line in the Word file.`);
-        (groups['Single Items']=groups['Single Items']||[]).push({line:it.line,qty:it.qty,desc:cleanDesc(raw),code:'(code not found)'});continue}
-      const g=classify(m[2]);
-      (groups[g]=groups[g]||[]).push({line:it.line,qty:it.qty,desc:cleanDesc(raw.slice(0,m.index)),code:m[1].replace(/\s/g,'')});
+    for(const it of extractItems(r,problems)){
+      if(softCodes.has(it.code)){moved++;continue}   // already on the Soft Contents report
+      const g=it.box?classify(it.box):'Single Items';
+      (groups[g]=groups[g]||[]).push(it);
     }
     const keys=ORDER.filter(k=>groups[k]).concat(Object.keys(groups).filter(k=>!ORDER.includes(k)));
     for(const k of keys)groups[k].sort((a,b)=>a.line-b.line);
-    return {name:r.name,groups,keys,count:r.items.length,declared:r.declared};
+    const sr=soft.get(roomKey(r.name)); if(sr)used.add(roomKey(r.name));
+    return {name:r.name,groups,keys,soft:sr?sr.items:[],softDeclared:sr?sr.declared:null,softRaw:sr?sr.rawCount:0,
+            count:r.items.length,declared:r.declared};
   });
-  return {rooms,problems,jobLabel:parsed.jobLabel,total:parsed.total};
+  // rooms that exist only on the Soft Contents report
+  const softOnly=[];
+  for(const [k,sr] of soft) if(!used.has(k)){
+    rooms.push({name:sr.name,groups:{},keys:[],soft:sr.items,softDeclared:sr.declared,softRaw:sr.rawCount,count:0,declared:null});
+    softOnly.push(sr.name);
+  }
+  return {rooms,problems,jobLabel:parsed.jobLabel||(softParsed&&softParsed.jobLabel)||'',total:parsed.total,
+          softTotal:softParsed?softParsed.total:null,hasSoft:!!softParsed,moved,softOnly};
 }
 
 /* ---------- 3. Word document ---------- */
@@ -284,6 +345,12 @@ function buildDoc(model){
       for(const it of items)kids.push(P([{text:`#${it.line} ${it.qty} ${it.desc} `},{text:it.code,bold:true}],{keepLines:true}));
       kids.push(P([{text:`Subtotal ${k}: ${items.length} line items`,bold:true}]));
     });
+    if(r.soft.length){                      // Soft Contents get their own section at the end of the room
+      if(r.keys.length)kids.push(blank());
+      kids.push(P([{text:'Soft Contents',bold:true}],{keepNext:true}));
+      for(const it of r.soft)kids.push(P([{text:`#${it.line} ${it.qty} ${it.desc} `},{text:it.code,bold:true}],{keepLines:true}));
+      kids.push(P([{text:`Subtotal Soft Contents: ${r.soft.length} line items`,bold:true}]));
+    }
   }
   const doc=new Document({
     styles:{default:{document:{run:{font:'Arial',size:22}}}},
@@ -293,47 +360,86 @@ function buildDoc(model){
 }
 
 /* ---------- 4. UI ---------- */
-let current=null;
+let current=null, mainParsed=null, softParsed=null, mainName='', softName='';
 const $=id=>document.getElementById(id);
-const drop=$('drop'),fileIn=$('file');
-drop.addEventListener('click',()=>fileIn.click());
-drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')fileIn.click()});
-['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
-['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over')}));
-drop.addEventListener('drop',e=>{if(e.dataTransfer.files[0])handle(e.dataTransfer.files[0])});
-fileIn.addEventListener('change',()=>{if(fileIn.files[0])handle(fileIn.files[0])});
+function wireDrop(dropEl,inputEl,onFile){
+  dropEl.addEventListener('click',e=>{if(e.target.closest('.clear'))return;inputEl.click()});
+  dropEl.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&!e.target.closest('.clear')){e.preventDefault();inputEl.click()}});
+  ['dragover','dragenter'].forEach(ev=>dropEl.addEventListener(ev,e=>{e.preventDefault();dropEl.classList.add('over')}));
+  ['dragleave','drop'].forEach(ev=>dropEl.addEventListener(ev,e=>{e.preventDefault();dropEl.classList.remove('over')}));
+  dropEl.addEventListener('drop',e=>{if(e.dataTransfer.files[0])onFile(e.dataTransfer.files[0])});
+  inputEl.addEventListener('change',()=>{if(inputEl.files[0])onFile(inputEl.files[0]);inputEl.value=''});
+}
+wireDrop($('drop'),$('file'),f=>loadFile(f,'main'));
+wireDrop($('drop-soft'),$('file-soft'),f=>loadFile(f,'soft'));
+$('clear-soft').addEventListener('click',e=>{e.stopPropagation();softParsed=null;softName='';renderSoftSlot();refresh()});
 
-async function handle(file){
+function renderSoftSlot(){
+  const z=$('drop-soft');
+  z.classList.toggle('loaded',!!softParsed);
+  $('soft-label').textContent=softParsed?softName:'Add the Soft Contents F9 (optional)';
+  $('soft-help').textContent=softParsed?'Soft items will be listed in their own section at the end of each room.':'Soft items are listed in their own section at the end of each room.';
+  $('clear-soft').classList.toggle('hidden',!softParsed);
+}
+
+async function loadFile(file,kind){
   const res=$('result');res.classList.remove('hidden');
   $('status').className='status';$('status').textContent='Reading '+file.name+' …';
-  $('summary').querySelector('tbody').innerHTML='';$('notes').innerHTML='';$('job').textContent='';$('dl').classList.add('hidden');
   try{
-    const lines=await pdfToLines(await file.arrayBuffer());
-    const parsed=parseRooms(lines);
+    const parsed=parseRooms(await pdfToLines(await file.arrayBuffer()));
     if(!parsed.rooms.length)throw new Error('No "Room:" sections found. Make sure this is the CLN F9 report (descriptions only), not the report with images.');
-    const model=buildModel(parsed);
-    const sum=model.rooms.reduce((a,r)=>a+r.count,0);
+    if(kind==='main'){mainParsed=parsed;mainName=file.name}else{softParsed=parsed;softName=file.name;renderSoftSlot()}
+    await refresh();
+  }catch(err){
+    console.error(err);$('status').className='status warn';$('status').textContent='Could not process '+file.name+': '+err.message;
+  }
+}
+
+async function refresh(){
+  const res=$('result');
+  $('summary').querySelector('tbody').innerHTML='';$('notes').innerHTML='';$('job').textContent='';$('dl').classList.add('hidden');
+  if(!mainParsed){
+    if(softParsed){res.classList.remove('hidden');$('status').className='status';$('status').textContent='Soft Contents F9 loaded. Now drop the main CLN F9 above.'}
+    else res.classList.add('hidden');
+    return;
+  }
+  res.classList.remove('hidden');
+  try{
+    const model=buildModel(mainParsed,softParsed);
+    const cleanable=model.rooms.reduce((a,r)=>a+Object.values(r.groups).reduce((x,g)=>x+g.length,0),0);
+    const softCount=model.rooms.reduce((a,r)=>a+r.soft.length,0);
     const notes=[...model.problems];
-    for(const r of model.rooms)if(r.declared!==null&&r.declared!==r.count)notes.push(`${r.name}: found ${r.count} items but the F9 says ${r.declared}.`);
-    if(model.total!==null&&model.total!==sum)notes.push(`Total found ${sum} but the F9 says ${model.total}.`);
-    const tb=$('summary').querySelector('tbody');
     for(const r of model.rooms){
-      const tr=document.createElement('tr');
+      if(r.declared!==null&&r.declared!==r.count)notes.push(`${r.name}: found ${r.count} items but the F9 says ${r.declared}.`);
+      if(r.softDeclared!=null&&r.softDeclared!==r.softRaw)notes.push(`${r.name} (Soft Contents F9): found ${r.softRaw} items but the report says ${r.softDeclared}.`);
+    }
+    const mainSum=mainParsed.rooms.reduce((a,r)=>a+r.items.length,0);
+    if(model.total!==null&&model.total!==mainSum)notes.push(`Total found ${mainSum} but the F9 says ${model.total}.`);
+    if(model.moved)notes.push(`${model.moved} item(s) on the main F9 were also on the Soft Contents F9, so they appear only under Soft Contents.`);
+    if(model.softOnly.length)notes.push(`Rooms that appear only on the Soft Contents F9 were added at the end: ${model.softOnly.join(', ')}.`);
+    // table
+    const table=$('summary');
+    table.querySelector('thead tr').innerHTML='<th>Room</th><th class="n">Line items</th>'+(model.hasSoft?'<th class="n">Soft</th>':'')+'<th class="n">F9 count</th>';
+    const tb=table.querySelector('tbody');
+    for(const r of model.rooms){
+      const hard=Object.values(r.groups).reduce((x,g)=>x+g.length,0);
       const bad=r.declared!==null&&r.declared!==r.count;
-      tr.innerHTML=`<td></td><td class="n">${r.count}</td><td class="n ${bad?'warn':''}">${r.declared??'–'}</td>`;
+      const tr=document.createElement('tr');
+      tr.innerHTML='<td></td><td class="n">'+hard+'</td>'+(model.hasSoft?'<td class="n">'+r.soft.length+'</td>':'')+`<td class="n ${bad?'warn':''}">${r.declared??'–'}</td>`;
       tr.firstChild.textContent=r.name;tb.appendChild(tr);
     }
     $('job').textContent=model.jobLabel?'Job: '+model.jobLabel:'';
-    const st=$('status');
-    if(notes.length){st.className='status warn';st.textContent=`Built, but please review ${notes.length} note(s) below.`;
-      const ul=document.createElement('ul');notes.forEach(n=>{const li=document.createElement('li');li.textContent=n;ul.appendChild(li)});$('notes').appendChild(ul)}
-    else{st.className='status ok';st.textContent=`All ${sum} line items accounted for across ${model.rooms.length} rooms.`}
+    const st=$('status'), unit=model.hasSoft?`${cleanable+softCount} line items (${cleanable} cleanable, ${softCount} soft)`:`${cleanable} line items`;
+    const warnNotes=notes.filter(n=>!/also on the Soft|only on the Soft/.test(n));
+    if(warnNotes.length){st.className='status warn';st.textContent=`Built, but please review ${warnNotes.length} note(s) below.`}
+    else{st.className='status ok';st.textContent=`All ${unit} accounted for across ${model.rooms.length} rooms.`}
+    if(notes.length){const ul=document.createElement('ul');notes.forEach(n=>{const li=document.createElement('li');li.textContent=n;ul.appendChild(li)});$('notes').appendChild(ul)}
     const blob=await buildDoc(model);
     current={blob,name:'Cleanable Items List'+(model.jobLabel?' - '+model.jobLabel.replace(/[\\/:*?"<>|]/g,'-'):'')+'.docx'};
     $('dl').classList.remove('hidden');
     window.__model=model;window.__ready=true;
   }catch(err){
-    console.error(err);$('status').className='status warn';$('status').textContent='Could not process that file: '+err.message;
+    console.error(err);$('status').className='status warn';$('status').textContent='Could not build the list: '+err.message;
   }
 }
 $('dl').addEventListener('click',()=>{
