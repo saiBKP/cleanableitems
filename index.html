@@ -342,13 +342,13 @@ function buildDoc(model){
       if(gi>0)kids.push(blank());
       const items=r.groups[k];
       kids.push(P([{text:k,bold:true}],{keepNext:true}));
-      for(const it of items)kids.push(P([{text:`#${it.line} ${it.qty} ${it.desc} `},{text:it.code,bold:true}],{keepLines:true}));
+      for(const it of items)kids.push(P([{text:`#${it.line} ${it.desc} `},{text:it.code,bold:true}],{keepLines:true}));
       kids.push(P([{text:`Subtotal ${k}: ${items.length} line items`,bold:true}]));
     });
     if(r.soft.length){                      // Soft Contents get their own section at the end of the room
       if(r.keys.length)kids.push(blank());
       kids.push(P([{text:'Soft Contents',bold:true}],{keepNext:true}));
-      for(const it of r.soft)kids.push(P([{text:`#${it.line} ${it.qty} ${it.desc} `},{text:it.code,bold:true}],{keepLines:true}));
+      for(const it of r.soft)kids.push(P([{text:`#${it.line} ${it.desc} `},{text:it.code,bold:true}],{keepLines:true}));
       kids.push(P([{text:`Subtotal Soft Contents: ${r.soft.length} line items`,bold:true}]));
     }
   }
